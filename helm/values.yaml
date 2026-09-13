@@ -1,0 +1,128 @@
+replicaCount: 2
+
+image:
+  repository: 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-service
+  tag: "1.0.2"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3002
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /api/health/
+    port: 3002
+  initialDelaySeconds: 20
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /api/health/
+    port: 3002
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+aws:
+  region: ap-south-1
+  s3Bucket: streamingapp-karan-2026
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+ingress:
+  enabled: false
+
+httpRoute:
+  enabled: false
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: {}
+affinity: {}
+
+auth:
+  replicaCount: 2
+  image:
+    repository: 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-auth
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+admin:
+  replicaCount: 2
+  image:
+    repository: 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-admin
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+chat:
+  replicaCount: 2
+  image:
+    repository: 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-chat
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-frontend
+    tag: "1.0.2"
+    pullPolicy: IfNotPresent
+
+mongo:
+  replicaCount: 1
+  image:
+    repository: mongo
+    tag: "6"
+    pullPolicy: IfNotPresent
+  storage: 5Gi
