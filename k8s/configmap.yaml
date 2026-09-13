@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamingapp-config
+  namespace: streamingapp
+data:
+  MONGO_URI: mongodb://mongo:27017/streamingapp
+  AUTH_SERVICE_URL: http://auth-svc:3001
+  STREAMING_SERVICE_URL: http://streaming-svc:3002
+  ADMIN_SERVICE_URL: http://admin-svc:3003
+  CHAT_SERVICE_URL: http://chat-svc:3004

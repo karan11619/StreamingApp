@@ -16,7 +16,7 @@ const seedVideo = async () => {
       thumbnailUrl: 'https://picsum.photos/seed/nights/800/450', // Placeholder thumbnail
       s3Key: 'theNights.mp4',
       duration: 180, // 3 minutes
-      genre: 'Music',
+      genre: 'Drama',
       releaseYear: 2024,
       rating: 4.8,
       isFeatured: true,
