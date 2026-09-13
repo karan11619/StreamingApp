@@ -1,143 +1,114 @@
 # StreamingApp – Kubernetes Container Orchestration & CI/CD
 
-> **Submission Documentation**
->
-> GitHub Repository: https://github.com/karan11619/StreamingApp  
-> AWS Region: `ap-south-1` (Mumbai)  
-> EKS Cluster: `streamingapp-cluster`  
-> Kubernetes Namespace: `streamingapp`
+A microservices-based video streaming application deployed to **Amazon EKS** using **Docker, Amazon ECR, Kubernetes, Helm, Jenkins, NGINX Ingress, Amazon S3, and CloudWatch**.
+
+**GitHub Repository:** https://github.com/karan11619/StreamingApp
+
+**AWS Region:** `ap-south-1` (Mumbai)
 
 ---
 
-## 1. Project Overview
-
-StreamingApp is a microservices-based video streaming application deployed on **Amazon EKS** using Kubernetes.
-
-The deployment demonstrates:
-
-- Docker containerization
-- Amazon ECR image storage
-- Amazon EKS Kubernetes orchestration
-- Kubernetes Deployments and Services
-- MongoDB StatefulSet
-- Persistent storage using AWS EBS
-- EBS CSI Driver
-- Horizontal Pod Autoscaler (HPA)
-- NGINX Ingress
-- AWS Load Balancer
-- Amazon S3 video storage
-- Amazon CloudWatch observability
-- Helm package management
-- Jenkins CI/CD
-- GitHub source control
-
----
-
-# 2. High-Level Deployment Flow
+## Architecture
 
 ```text
-Developer
-    |
-    v
-GitHub
-    |
-    v
-Jenkins CI/CD
-    |
-    +--> Checkout source
-    |
-    +--> Build 5 Docker images
-    |
-    +--> Login to Amazon ECR
-    |
-    +--> Tag & Push images
-    |
-    +--> Update EKS kubeconfig
-    |
-    +--> Helm Upgrade
-    |
-    +--> Rollout validation
-    |
-    v
-Amazon EKS
-    |
-    +--> NGINX Ingress
-    |
-    +--> Frontend
-    +--> Auth
-    +--> Admin
-    +--> Chat
-    +--> Streaming
-    +--> MongoDB
-              |
-              v
-          AWS EBS
-
-Streaming Service ---> Amazon S3
-EKS                  ---> Amazon CloudWatch
+                         ┌──────────────────────────┐
+                         │        Developer         │
+                         │                          │
+                         │      git push → main     │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │       GitHub Repo        │
+                         │  karan11619/StreamingApp │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+              ┌──────────────────────────────────────────┐
+              │             Jenkins CI/CD                │
+              │                                          │
+              │  1. Checkout                             │
+              │  2. Build 5 Docker images                │
+              │  3. Login to Amazon ECR                  │
+              │  4. Tag images                           │
+              │  5. Push images to ECR                   │
+              │  6. Update EKS kubeconfig                │
+              │  7. Helm upgrade                         │
+              │  8. Kubernetes rollout validation        │
+              └──────────────────┬───────────────────────┘
+                                 │
+                                 ▼
+              ┌──────────────────────────────────────────┐
+              │              Amazon ECR                  │
+              │                                          │
+              │ streaming-auth                           │
+              │ streaming-admin                          │
+              │ streaming-chat                           │
+              │ streaming-frontend                       │
+              │ streaming-service                        │
+              └──────────────────┬───────────────────────┘
+                                 │
+                                 ▼
+              ┌──────────────────────────────────────────┐
+              │             Amazon EKS                   │
+              │        streamingapp-cluster              │
+              │                                          │
+              │  ┌────────────────────────────────────┐  │
+              │  │ Namespace: streamingapp            │  │
+              │  │                                    │  │
+              │  │ NGINX Ingress                      │  │
+              │  │       │                            │  │
+              │  │       ├── Frontend (2)              │  │
+              │  │       ├── Auth (2)                  │  │
+              │  │       ├── Admin (2)                 │  │
+              │  │       ├── Chat (2)                  │  │
+              │  │       └── Streaming (2-5)           │  │
+              │  │              │                      │  │
+              │  │              ├── Amazon S3           │  │
+              │  │              └── MongoDB StatefulSet │  │
+              │  │                         │            │  │
+              │  │                         └── EBS      │  │
+              │  └────────────────────────────────────┘  │
+              │                                          │
+              │  HPA: 2-5 replicas                       │
+              │  CloudWatch: metrics and logs            │
+              └──────────────────┬───────────────────────┘
+                                 │
+                                 ▼
+                         ┌──────────────────┐
+                         │    End User      │
+                         │                  │
+                         │ AWS LoadBalancer │
+                         │       ↓          │
+                         │ NGINX Ingress    │
+                         └──────────────────┘
 ```
 
----
-
-# 3. Architecture Diagram
+### Mermaid Architecture
 
 ```mermaid
 flowchart TB
+    DEV["Developer"] --> GIT["GitHub Repository<br/>StreamingApp"]
+    GIT --> JENKINS["Jenkins CI/CD"]
+    JENKINS --> BUILD["Docker Build<br/>5 Microservices"]
+    BUILD --> ECR["Amazon ECR<br/>5 Repositories"]
+    ECR --> EKS["Amazon EKS<br/>streamingapp-cluster"]
 
-    USER["End User"]
+    USER["End User"] --> ALB["AWS Load Balancer"]
+    ALB --> ING["NGINX Ingress Controller"]
 
-    DEV["Developer"]
-
-    GIT["GitHub Repository<br/>StreamingApp"]
-
-    JENKINS["Jenkins CI/CD"]
-
-    BUILD["Docker Build<br/>5 Microservices"]
-
-    ECR["Amazon ECR<br/>5 Repositories"]
-
-    ALB["AWS Load Balancer"]
-
-    EKS["Amazon EKS<br/>streamingapp-cluster"]
-
-    ING["NGINX Ingress Controller"]
-
-    subgraph NAMESPACE["Kubernetes Namespace: streamingapp"]
-
-        FRONT["Frontend<br/>2 Replicas"]
-
-        AUTH["Auth Service<br/>2 Replicas"]
-
-        ADMIN["Admin Service<br/>2 Replicas"]
-
-        CHAT["Chat Service<br/>2 Replicas"]
-
-        STREAM["Streaming Service<br/>2-5 Replicas"]
-
-        MONGO["MongoDB StatefulSet<br/>1 Replica"]
-
-        PVC["PersistentVolumeClaim<br/>5Gi gp2"]
-
-        HPA["Horizontal Pod Autoscaler<br/>Min 2 / Max 5"]
-
+    subgraph NS["Kubernetes Namespace: streamingapp"]
+        FRONT["Frontend<br/>2 replicas"]
+        AUTH["Auth<br/>2 replicas"]
+        ADMIN["Admin<br/>2 replicas"]
+        CHAT["Chat<br/>2 replicas"]
+        STREAM["Streaming<br/>2-5 replicas"]
+        MONGO["MongoDB StatefulSet<br/>1 replica"]
+        PVC["PVC<br/>5Gi gp2"]
+        HPA["HPA<br/>2-5 replicas"]
     end
 
-    S3["Amazon S3<br/>Video Storage"]
-
-    EBS["Amazon EBS<br/>Persistent Storage"]
-
-    CW["Amazon CloudWatch<br/>Metrics & Logs"]
-
-    DEV --> GIT
-    GIT --> JENKINS
-    JENKINS --> BUILD
-    BUILD --> ECR
-    ECR --> EKS
-
-    USER --> ALB
-    ALB --> ING
     EKS --> ING
-
     ING --> FRONT
     ING --> AUTH
     ING --> ADMIN
@@ -145,37 +116,33 @@ flowchart TB
     ING --> STREAM
 
     STREAM --> MONGO
-    STREAM --> S3
-
+    STREAM --> S3["Amazon S3<br/>theNights.mp4"]
     MONGO --> PVC
-    PVC --> EBS
-
+    PVC --> EBS["Amazon EBS"]
     HPA --> STREAM
-
-    EKS --> CW
+    EKS --> CW["Amazon CloudWatch<br/>Metrics & Logs"]
 ```
 
 ---
 
-# 4. Main Deployment Steps
+# Application
 
-## Step 1 – Prepare the Application
+StreamingApp is a microservices video streaming application consisting of:
 
-The application consists of five containerized services:
+- Frontend
+- Authentication service
+- Administration service
+- Chat service
+- Streaming service
+- MongoDB
 
-| Service | Port | Docker Image |
-|---|---:|---|
-| Frontend | 80 | `streaming-frontend:1.0.2` |
-| Authentication | 3001 | `streaming-auth:1.0.0` |
-| Administration | 3003 | `streaming-admin:1.0.0` |
-| Chat | 3004 | `streaming-chat:1.0.0` |
-| Streaming | 3002 | `streaming-service:1.0.2` |
-
-MongoDB is deployed separately as a StatefulSet.
+The application is containerized and deployed as Kubernetes workloads.
 
 ---
 
-## Step 2 – Create the EKS Cluster
+# Main Deployment Steps
+
+## 1. Create Amazon EKS Cluster
 
 Cluster:
 
@@ -189,84 +156,86 @@ Region:
 ap-south-1
 ```
 
-The EKS cluster contains **3 worker nodes**.
+The cluster contains three worker nodes.
 
-Validation command:
+### Command
 
 ```powershell
 kubectl get nodes -o wide
 ```
 
-Result:
+### Output
 
 ```text
-3/3 nodes Ready
-Kubernetes v1.34.10
+NAME                                            STATUS   ROLES    AGE     VERSION
+ip-192-168-24-91.ap-south-1.compute.internal    Ready    <none>   5h26m   v1.34.10-eks-cb19647
+ip-192-168-62-21.ap-south-1.compute.internal    Ready    <none>   5h28m   v1.34.10-eks-cb19647
+ip-192-168-86-203.ap-south-1.compute.internal   Ready    <none>   4h54m   v1.34.10-eks-cb19647
 ```
 
-### screenshot
+### Screenshot
 
-![EKS worker nodes](screenshot/01-eks-nodes.png)
+![EKS worker nodes](docs/screenshots/01-eks-nodes.png)
 
 ---
 
-## Step 3 – Configure Kubernetes Namespace
+## 2. Configure Kubernetes Namespace
 
-Application resources are isolated in:
+Application workloads are deployed into:
 
 ```text
 streamingapp
 ```
 
-Typical command:
+Example:
 
 ```powershell
-kubectl get namespace
+kubectl get pods -n streamingapp
 ```
 
-Application resources are then deployed using:
-
-```powershell
-kubectl -n streamingapp ...
-```
+All application resources are managed within this namespace.
 
 ---
 
-## Step 4 – Configure Persistent Storage
+## 3. Configure Persistent Storage for MongoDB
 
-MongoDB requires persistent storage.
+MongoDB uses a Kubernetes PersistentVolumeClaim backed by AWS EBS.
 
-A `5Gi` PVC using the `gp2` StorageClass was configured.
+Configuration:
 
-Validation:
+```text
+Capacity: 5Gi
+Access Mode: RWO
+StorageClass: gp2
+```
+
+### Command
 
 ```powershell
 kubectl get pvc -n streamingapp
 ```
 
-Result:
+### Output
 
 ```text
-mongo-data-mongo-0   Bound   5Gi   RWO   gp2
+NAME                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
+mongo-data-mongo-0   Bound    pvc-11a3bb7b-be27-418a-9ee6-e5e4d434fd0b   5Gi        RWO            gp2
 ```
 
-### screenshot
+### Screenshot
 
-![MongoDB persistent volume](screenshot/05-pvc.png)
+![MongoDB persistent storage](docs/screenshots/05-pvc.png)
 
 ---
 
-## Step 5 – Deploy MongoDB
+## 4. Deploy MongoDB StatefulSet
 
-MongoDB is deployed as a Kubernetes StatefulSet.
-
-Important properties:
+MongoDB is deployed as:
 
 ```text
 StatefulSet: mongo
 Replica: 1
 Port: 27017
-Storage: 5Gi
 ```
 
 The MongoDB pod is:
@@ -275,343 +244,13 @@ The MongoDB pod is:
 mongo-0
 ```
 
-and is backed by the persistent volume claim.
+The database uses the persistent volume claim so that data is not tied to the lifecycle of a pod.
 
 ---
 
-## Step 6 – Configure Application Services
+## 5. Build Docker Images
 
-The application uses Kubernetes ClusterIP services for internal communication.
-
-Validation:
-
-```powershell
-kubectl get svc -n streamingapp
-```
-
-Services:
-
-```text
-admin-svc
-auth-svc
-chat-svc
-frontend-svc
-mongo
-streaming-svc
-```
-
-### screenshot
-
-![Kubernetes services](screenshot/03-services.png)
-
----
-
-## Step 7 – Deploy the Microservices
-
-The following Kubernetes Deployments are used:
-
-```text
-auth
-admin
-chat
-frontend
-streaming
-```
-
-Each normal application service runs with two replicas.
-
-The Streaming deployment can scale from 2 to 5 replicas through HPA.
-
-Validation:
-
-```powershell
-kubectl get pods -n streamingapp
-```
-
-Result:
-
-```text
-admin       2/2 Running
-auth        2/2 Running
-chat        2/2 Running
-frontend    2/2 Running
-streaming   2/2 Running
-mongo       1/1 Running
-```
-
-All application pods had zero restarts during final validation.
-
-### screenshot
-
-![Application pods](screenshot/02-application-pods.png)
-
----
-
-# 5. Amazon ECR
-
-Five ECR repositories were created:
-
-```text
-streaming-auth
-streaming-admin
-streaming-chat
-streaming-frontend
-streaming-service
-```
-
-AWS ECR registry:
-
-```text
-913436626979.dkr.ecr.ap-south-1.amazonaws.com
-```
-
-Validation command:
-
-```powershell
-aws ecr describe-repositories --region ap-south-1 --query "repositories[?contains(repositoryName, 'streaming-')].repositoryName" --output table
-```
-
-Output:
-
-```text
-streaming-admin
-streaming-service
-streaming-auth
-streaming-chat
-streaming-frontend
-```
-
-### screenshot
-
-![Amazon ECR repositories](screenshot/09-ecr.png)
-
----
-
-# 6. Amazon S3 Video Storage
-
-Video content is stored in:
-
-```text
-Bucket: streamingapp-karan-2026
-Object: theNights.mp4
-```
-
-The Streaming service uses this S3 bucket for video content.
-
-A range request was validated successfully with:
-
-```text
-HTTP 206 Partial Content
-```
-
-This confirms byte-range retrieval support for the video object.
-
----
-
-# 7. Helm Deployment
-
-The Kubernetes resources are packaged in:
-
-```text
-helm/
-```
-
-Chart:
-
-```text
-streamingapp
-```
-
-Chart version:
-
-```text
-1.0.0
-```
-
-Application version:
-
-```text
-1.0.2
-```
-
-Helm release:
-
-```text
-streamingapp
-```
-
-Deploy command:
-
-```bash
-helm upgrade streamingapp ./helm \
-  --install \
-  -n streamingapp
-```
-
-On the Jenkins agent, Helm 3 is installed and used for deployment.
-
-Validation:
-
-```powershell
-C:\helm3\windows-amd64\helm.exe status streamingapp -n streamingapp
-```
-
-Output:
-
-```text
-NAME: streamingapp
-STATUS: deployed
-REVISION: 3
-```
-
-### screenshot
-
-![Helm release](screenshot/08-helm.png)
-
----
-
-# 8. Horizontal Pod Autoscaler
-
-The Streaming service uses HPA.
-
-Configuration:
-
-```text
-Minimum replicas: 2
-Maximum replicas: 5
-CPU target: 70%
-```
-
-Validation:
-
-```powershell
-kubectl get hpa -n streamingapp
-```
-
-Output:
-
-```text
-streaming   Deployment/streaming   cpu: 1%/70%   2   5   2
-```
-
-### screenshot
-
-![HPA validation](screenshot/04-hpa.png)
-
----
-
-# 9. NGINX Ingress
-
-NGINX Ingress Controller provides external routing.
-
-Validation:
-
-```powershell
-kubectl get ingress -n streamingapp
-```
-
-Load Balancer:
-
-```text
-aed661b870a374b8a8216927189e499d-50718f108f720044.elb.ap-south-1.amazonaws.com
-```
-
-Application URL:
-
-```text
-http://aed661b870a374b8a8216927189e499d-50718f108f720044.elb.ap-south-1.amazonaws.com/
-```
-
-Routing:
-
-| Path | Backend |
-|---|---|
-| `/` | `frontend-svc` |
-| `/api/auth` | `auth-svc` |
-| `/api/streaming` | `streaming-svc` |
-| `/api/admin` | `admin-svc` |
-| `/api/chat` | `chat-svc` |
-| `/socket.io` | `chat-svc` |
-
-### screenshot
-
-![Ingress validation](screenshot/06-ingress.png)
-
----
-
-# 10. AWS EBS CSI Driver
-
-The EBS CSI Driver connects Kubernetes persistent volumes to AWS EBS storage.
-
-The MongoDB PVC was validated as:
-
-```text
-Status: Bound
-Capacity: 5Gi
-Access Mode: RWO
-StorageClass: gp2
-```
-
-This provides persistent storage for MongoDB.
-
----
-
-# 11. CloudWatch Observability
-
-Amazon CloudWatch observability was enabled for EKS.
-
-Components:
-
-```text
-CloudWatch Observability Controller
-CloudWatch Agent
-Fluent Bit
-```
-
-Validation:
-
-```powershell
-kubectl get pods -n amazon-cloudwatch
-```
-
-Result:
-
-```text
-Controller: 1/1 Running
-CloudWatch Agent: 3/3 Running
-Fluent Bit: 3/3 Running
-```
-
-### screenshot
-
-![CloudWatch observability](screenshot/07-cloudwatch.png)
-
----
-
-# 12. Jenkins CI/CD
-
-Jenkins job:
-
-```text
-StreamingApp-CI-CD
-```
-
-GitHub repository:
-
-```text
-https://github.com/karan11619/StreamingApp
-```
-
-## Pipeline Stages
-
-### Stage 1 – Checkout
-
-```groovy
-git branch: 'main',
-    url: 'https://github.com/karan11619/StreamingApp.git'
-```
-
-### Stage 2 – Build Docker Images
+Five application Docker images are built.
 
 ```bash
 docker build -t streaming-auth:1.0.0 backend/authService
@@ -628,50 +267,204 @@ docker build -t streaming-service:1.0.2 \
   -f backend/streamingService/Dockerfile backend
 ```
 
-### Stage 3 – Login to ECR
+Images:
 
-```bash
-aws ecr get-login-password \
-  --region "$AWS_REGION" |
-  docker login \
-  --username AWS \
-  --password-stdin "$ECR_REGISTRY"
+```text
+streaming-auth:1.0.0
+streaming-admin:1.0.0
+streaming-chat:1.0.0
+streaming-frontend:1.0.2
+streaming-service:1.0.2
 ```
 
-### Stage 4 – Tag Images
+---
+
+# Amazon ECR
+
+## 6. Create ECR Repositories
+
+Five ECR repositories are used:
+
+```text
+streaming-auth
+streaming-admin
+streaming-chat
+streaming-frontend
+streaming-service
+```
+
+Registry:
+
+```text
+913436626979.dkr.ecr.ap-south-1.amazonaws.com
+```
+
+### Command
+
+```powershell
+aws ecr describe-repositories --region ap-south-1 --query "repositories[?contains(repositoryName, 'streaming-')].repositoryName" --output table
+```
+
+### Output
+
+```text
+------------------------
+| DescribeRepositories |
++----------------------+
+|  streaming-admin     |
+|  streaming-service   |
+|  streaming-auth      |
+|  streaming-chat      |
+|  streaming-frontend  |
++----------------------+
+```
+
+### Screenshot
+
+![Amazon ECR repositories](docs/screenshots/09-ecr.png)
+
+---
+
+## 7. Login to Amazon ECR
+
+```powershell
+aws ecr get-login-password --region ap-south-1 |
+docker login --username AWS --password-stdin 913436626979.dkr.ecr.ap-south-1.amazonaws.com
+```
+
+---
+
+## 8. Tag and Push Images
 
 Example:
 
-```bash
-docker tag streaming-auth:1.0.0 \
+```powershell
+docker tag streaming-auth:1.0.0 `
   913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-auth:1.0.0
 ```
 
-Equivalent tagging is performed for all five services.
+Push:
 
-### Stage 5 – Push Images
-
-```bash
+```powershell
 docker push 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-auth:1.0.0
-
-docker push 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-admin:1.0.0
-
-docker push 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-chat:1.0.0
-
-docker push 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-frontend:1.0.2
-
-docker push 913436626979.dkr.ecr.ap-south-1.amazonaws.com/streaming-service:1.0.2
 ```
 
-### Stage 6 – Configure EKS
+The same process is performed for all five services.
 
-```bash
-aws eks update-kubeconfig \
-  --region ap-south-1 \
-  --name streamingapp-cluster
+---
+
+# Kubernetes Deployment
+
+## 9. Deploy Application Workloads
+
+Deployments:
+
+```text
+auth
+admin
+chat
+frontend
+streaming
 ```
 
-### Stage 7 – Deploy with Helm
+### Command
+
+```powershell
+kubectl get pods -n streamingapp
+```
+
+### Output
+
+```text
+NAME                         READY   STATUS    RESTARTS
+admin-549b8f7969-d67pm       1/1     Running   0
+admin-549b8f7969-jj4dq       1/1     Running   0
+auth-78bd4c8d98-bqc5h        1/1     Running   0
+auth-78bd4c8d98-g9hxb        1/1     Running   0
+chat-699d95fc-tkrpt          1/1     Running   0
+chat-699d95fc-xz6l8          1/1     Running   0
+frontend-7ff8686b85-cb4vp    1/1     Running   0
+frontend-7ff8686b85-zc7fv    1/1     Running   0
+mongo-0                      1/1     Running   0
+streaming-7ffdd77dfc-ng5vs   1/1     Running   0
+streaming-7ffdd77dfc-swcdp   1/1     Running   0
+```
+
+### Screenshot
+
+![Application pods](docs/screenshots/02-application-pods.png)
+
+---
+
+## 10. Create Kubernetes Services
+
+Services:
+
+```text
+admin-svc
+auth-svc
+chat-svc
+frontend-svc
+mongo
+streaming-svc
+```
+
+### Command
+
+```powershell
+kubectl get svc -n streamingapp
+```
+
+### Output
+
+```text
+NAME            TYPE        CLUSTER-IP       PORT(S)
+admin-svc       ClusterIP   10.100.18.51     3003/TCP
+auth-svc        ClusterIP   10.100.149.79    3001/TCP
+chat-svc        ClusterIP   10.100.203.193   3004/TCP
+frontend-svc    ClusterIP   10.100.181.143   80/TCP
+mongo           ClusterIP   None             27017/TCP
+streaming-svc   ClusterIP   10.100.80.51     3002/TCP
+```
+
+### Screenshot
+
+![Kubernetes services](docs/screenshots/03-services.png)
+
+---
+
+# Helm
+
+## 11. Package Kubernetes Resources with Helm
+
+Helm chart:
+
+```text
+helm/
+```
+
+Chart version:
+
+```text
+1.0.0
+```
+
+Application version:
+
+```text
+1.0.2
+```
+
+The chart manages:
+
+- Deployments
+- StatefulSet
+- Services
+- ConfigMap
+- HPA
+- Ingress
+
+### Helm deployment command
 
 ```bash
 helm upgrade streamingapp ./helm \
@@ -679,7 +472,244 @@ helm upgrade streamingapp ./helm \
   -n streamingapp
 ```
 
-### Stage 8 – Validate Rollout
+### Validate Helm release
+
+```powershell
+C:\helm3\windows-amd64\helm.exe status streamingapp -n streamingapp
+```
+
+### Output
+
+```text
+NAME: streamingapp
+LAST DEPLOYED: Sun Sep 13 17:48:21 2026
+NAMESPACE: streamingapp
+STATUS: deployed
+REVISION: 3
+TEST SUITE: None
+```
+
+### Screenshot
+
+![Helm release](docs/screenshots/08-helm.png)
+
+---
+
+# Horizontal Pod Autoscaling
+
+## 12. Configure HPA
+
+Streaming service:
+
+```text
+Minimum replicas: 2
+Maximum replicas: 5
+CPU target: 70%
+```
+
+### Command
+
+```powershell
+kubectl get hpa -n streamingapp
+```
+
+### Output
+
+```text
+NAME        REFERENCE              TARGETS       MINPODS   MAXPODS   REPLICAS
+streaming   Deployment/streaming   cpu: 1%/70%   2         5         2
+```
+
+### Screenshot
+
+![HPA](docs/screenshots/04-hpa.png)
+
+The Streaming deployment can automatically scale between 2 and 5 replicas according to CPU utilization.
+
+---
+
+# NGINX Ingress
+
+## 13. Configure External Routing
+
+NGINX Ingress Controller provides HTTP routing to the application services.
+
+### Command
+
+```powershell
+kubectl get ingress -n streamingapp
+```
+
+### Output
+
+```text
+NAME                        CLASS   HOSTS   ADDRESS
+streamingapp-auth-ingress   nginx   *       aed661b870a374b8a8216927189e499d-50718f108f720044.elb.ap-south-1.amazonaws.com
+streamingapp-ingress        nginx   *       aed661b870a374b8a8216927189e499d-50718f108f720044.elb.ap-south-1.amazonaws.com
+```
+
+### Screenshot
+
+![NGINX Ingress](docs/screenshots/06-ingress.png)
+
+### Application URL
+
+```text
+http://aed661b870a374b8a8216927189e499d-50718f108f720044.elb.ap-south-1.amazonaws.com/
+```
+
+### Routing
+
+| Path | Service |
+|---|---|
+| `/` | `frontend-svc` |
+| `/api/auth` | `auth-svc` |
+| `/api/streaming` | `streaming-svc` |
+| `/api/admin` | `admin-svc` |
+| `/api/chat` | `chat-svc` |
+| `/socket.io` | `chat-svc` |
+
+---
+
+# Amazon S3
+
+## 14. Configure Video Storage
+
+Bucket:
+
+```text
+streamingapp-karan-2026
+```
+
+Video object:
+
+```text
+theNights.mp4
+```
+
+The Streaming service uses Amazon S3 for video storage.
+
+A byte-range request was validated successfully and returned:
+
+```text
+HTTP 206 Partial Content
+```
+
+This supports video range retrieval.
+
+---
+
+# CloudWatch
+
+## 15. Enable EKS Observability
+
+Amazon CloudWatch observability is enabled using:
+
+```text
+Amazon CloudWatch Observability Controller
+CloudWatch Agent
+Fluent Bit
+```
+
+### Command
+
+```powershell
+kubectl get pods -n amazon-cloudwatch
+```
+
+### Output
+
+```text
+NAME                                                              READY   STATUS    RESTARTS
+amazon-cloudwatch-observability-controller-manager-7b69f88wjqfb   1/1     Running   0
+cloudwatch-agent-pttnf                                            1/1     Running   0
+cloudwatch-agent-stf87                                            1/1     Running   0
+cloudwatch-agent-w5txg                                            1/1     Running   0
+fluent-bit-6knpb                                                  1/1     Running   0
+fluent-bit-7g9xv                                                  1/1     Running   0
+fluent-bit-lzpgd                                                  1/1     Running   0
+```
+
+### Screenshot
+
+![CloudWatch observability](docs/screenshots/07-cloudwatch.png)
+
+---
+
+# Jenkins CI/CD Pipeline
+
+## 16. Jenkins Pipeline
+
+Jenkins job:
+
+```text
+StreamingApp-CI-CD
+```
+
+GitHub repository:
+
+```text
+https://github.com/karan11619/StreamingApp.git
+```
+
+Pipeline flow:
+
+```text
+GitHub
+   ↓
+Checkout
+   ↓
+Build Docker Images
+   ↓
+Login to Amazon ECR
+   ↓
+Tag Images
+   ↓
+Push Images to ECR
+   ↓
+Update EKS kubeconfig
+   ↓
+Helm Upgrade
+   ↓
+Rollout Validation
+   ↓
+SUCCESS
+```
+
+### Checkout
+
+```groovy
+git branch: 'main',
+    url: 'https://github.com/karan11619/StreamingApp.git'
+```
+
+### AWS Authentication
+
+AWS credentials are stored in Jenkins Credentials and injected into the pipeline using `withCredentials`.
+
+The pipeline verifies AWS identity with:
+
+```bash
+aws sts get-caller-identity
+```
+
+### EKS Configuration
+
+```bash
+aws eks update-kubeconfig \
+  --region ap-south-1 \
+  --name streamingapp-cluster
+```
+
+### Helm Deployment
+
+```bash
+helm upgrade streamingapp ./helm \
+  --install \
+  -n streamingapp
+```
+
+### Rollout Validation
 
 ```bash
 kubectl rollout status deployment/auth \
@@ -698,7 +728,44 @@ kubectl rollout status deployment/streaming \
   -n streamingapp --timeout=180s
 ```
 
-The final Jenkins pipeline completed with:
+---
+
+# 17. Successful Jenkins Deployment
+
+The final Jenkins run checked out the Helm chart commit:
+
+```text
+8d30a2db09643b7ff1f66b6e3e921ff60e699882
+```
+
+Commit:
+
+```text
+Add Helm chart for CI/CD deployment
+```
+
+Jenkins successfully:
+
+```text
+✓ Checked out GitHub source
+✓ Built authentication image
+✓ Built admin image
+✓ Built chat image
+✓ Built frontend image
+✓ Built streaming image
+✓ Logged into Amazon ECR
+✓ Pushed all 5 images
+✓ Updated EKS kubeconfig
+✓ Upgraded Helm release
+✓ Rolled out auth
+✓ Rolled out admin
+✓ Rolled out chat
+✓ Rolled out frontend
+✓ Rolled out streaming
+✓ Completed successfully
+```
+
+Final pipeline result:
 
 ```text
 StreamingApp CI/CD pipeline SUCCESS
@@ -707,55 +774,23 @@ Finished: SUCCESS
 
 ---
 
-# 13. Jenkins CI/CD screenshot
+# 18. Final Deployment Validation
 
-The successful Jenkins run checked out commit:
-
-```text
-8d30a2db09643b7ff1f66b6e3e921ff60e699882
-```
-
-with commit message:
-
-```text
-Add Helm chart for CI/CD deployment
-```
-
-The pipeline then:
-
-1. Built all five Docker images.
-2. Logged into Amazon ECR.
-3. Pushed all five images.
-4. Updated EKS kubeconfig.
-5. Successfully upgraded Helm release revision 3.
-6. Successfully rolled out all five Deployments.
-7. Finished with `SUCCESS`.
-
-The Jenkins console output is the primary CI/CD screenshot for this section.
-
----
-
-# 14. Final Kubernetes Validation
-
-## Nodes
+## EKS Nodes
 
 ```bash
 kubectl get nodes -o wide
 ```
 
-Expected final state:
-
 ```text
-3/3 Ready
+3/3 nodes Ready
 ```
 
-## Pods
+## Application Pods
 
 ```bash
 kubectl get pods -n streamingapp
 ```
-
-Final state:
 
 ```text
 admin       2/2 Running
@@ -772,7 +807,9 @@ mongo       1/1 Running
 kubectl get svc -n streamingapp
 ```
 
-Six services are present.
+```text
+6 services available
+```
 
 ## HPA
 
@@ -781,9 +818,10 @@ kubectl get hpa -n streamingapp
 ```
 
 ```text
-2 minimum
-5 maximum
-70% CPU target
+Min: 2
+Max: 5
+CPU Target: 70%
+Current: 2 replicas
 ```
 
 ## Persistent Storage
@@ -793,10 +831,9 @@ kubectl get pvc -n streamingapp
 ```
 
 ```text
-5Gi
-Bound
-RWO
-gp2
+Status: Bound
+Capacity: 5Gi
+StorageClass: gp2
 ```
 
 ## Ingress
@@ -805,13 +842,10 @@ gp2
 kubectl get ingress -n streamingapp
 ```
 
-Both Ingress resources use:
-
 ```text
-nginx
+NGINX Ingress
+AWS Load Balancer assigned
 ```
-
-and the AWS Load Balancer address.
 
 ## CloudWatch
 
@@ -819,31 +853,50 @@ and the AWS Load Balancer address.
 kubectl get pods -n amazon-cloudwatch
 ```
 
-All CloudWatch components are Running.
+```text
+Controller: 1/1 Running
+CloudWatch Agent: 3/3 Running
+Fluent Bit: 3/3 Running
+```
+
+## Helm
+
+```bash
+helm status streamingapp -n streamingapp
+```
+
+```text
+Status: deployed
+Revision: 3
+```
 
 ---
 
-# 15. Submission screenshot Checklist
+# 19. Technology Stack
 
-Use the following screenshot in the final submission:
-
-- [x] GitHub repository
-- [x] EKS worker nodes
-- [x] Kubernetes application pods
-- [x] Kubernetes services
-- [x] HPA
-- [x] Persistent Volume Claim
-- [x] NGINX Ingress
-- [x] CloudWatch
-- [x] Helm release
-- [x] Amazon ECR repositories
-- [x] Jenkins successful pipeline
-- [x] Application Load Balancer
-- [x] Amazon S3 video storage
+| Component | Technology |
+|---|---|
+| Source Control | GitHub |
+| CI/CD | Jenkins |
+| Containerization | Docker |
+| Container Registry | Amazon ECR |
+| Kubernetes | Kubernetes 1.34 |
+| Kubernetes Platform | Amazon EKS |
+| Package Management | Helm 3 |
+| Ingress | NGINX Ingress Controller |
+| Load Balancing | AWS Load Balancer |
+| Database | MongoDB |
+| Persistent Storage | AWS EBS |
+| Storage Integration | EBS CSI Driver |
+| Object Storage | Amazon S3 |
+| Autoscaling | Kubernetes HPA |
+| Monitoring | Amazon CloudWatch |
+| Cloud Permissions | AWS IAM |
+| AWS Region | `ap-south-1` |
 
 ---
 
-# 16. Project Structure
+# 20. Project Structure
 
 ```text
 StreamingApp/
@@ -873,78 +926,124 @@ StreamingApp/
 │       ├── streaming-hpa.yaml
 │       └── streaming-service.yaml
 │
+├── docs/
+│   └── screenshots/
+│       ├── 01-eks-nodes.png
+│       ├── 02-application-pods.png
+│       ├── 03-services.png
+│       ├── 04-hpa.png
+│       ├── 05-pvc.png
+│       ├── 06-ingress.png
+│       ├── 07-cloudwatch.png
+│       ├── 08-helm.png
+│       └── 09-ecr.png
+│
 └── README.md
 ```
 
 ---
 
-# 17. Final Architecture Summary
+# 21. Security
 
-| Layer | Technology |
-|---|---|
-| Source Control | GitHub |
-| CI/CD | Jenkins |
-| Containerization | Docker |
-| Container Registry | Amazon ECR |
-| Orchestration | Kubernetes |
-| Kubernetes Platform | Amazon EKS |
-| Package Management | Helm |
-| Ingress | NGINX Ingress Controller |
-| External Load Balancing | AWS Load Balancer |
-| Database | MongoDB |
-| Persistent Storage | AWS EBS / EBS CSI |
-| Object Storage | Amazon S3 |
-| Autoscaling | Kubernetes HPA |
-| Monitoring & Logs | Amazon CloudWatch |
-| Cloud Permissions | AWS IAM |
+The deployment uses:
+
+- Jenkins Credentials for AWS credentials
+- Kubernetes Secrets for application credentials
+- AWS IAM permissions
+- EBS CSI Driver permissions
+- Kubernetes namespace isolation
+- ClusterIP services for internal communication
+- NGINX Ingress for external routing
+
+**Sensitive credentials must not be committed to GitHub.**
 
 ---
 
-# 18. Final Result
+# 22. Submission Screenshots
 
-The complete deployment pipeline was successfully validated:
+The `docs/screenshots/` directory contains the key deployment screenshots used in this documentation.
 
-```text
-GitHub
-   ↓
-Jenkins
-   ↓
-Docker Build
-   ↓
-Amazon ECR
-   ↓
-Helm
-   ↓
-Amazon EKS
-   ↓
-Kubernetes
-   ↓
-NGINX Ingress
-   ↓
-Application
-```
+### 1. EKS Worker Nodes
 
-Final validated state:
+![EKS nodes](docs/screenshots/01-eks-nodes.png)
 
-```text
-EKS Nodes              ✓ 3/3 Ready
-Application Pods       ✓ Running
-MongoDB                ✓ Running
-Persistent Storage     ✓ Bound
-Services               ✓ 6 Services
-HPA                    ✓ 2-5 Replicas
-Ingress                ✓ NGINX
-ECR                    ✓ 5 Repositories
-Helm                   ✓ Deployed, Revision 3
-CloudWatch             ✓ Running
-Jenkins CI/CD          ✓ SUCCESS
-S3 Video Storage       ✓ Configured
-```
+### 2. Application Pods
 
-# 👨‍💻 Repository
+![Application pods](docs/screenshots/02-application-pods.png)
 
-**StreamingApp**
+### 3. Kubernetes Services
 
-https://github.com/karan11619/StreamingApp
+![Services](docs/screenshots/03-services.png)
+
+### 4. HPA
+
+![HPA](docs/screenshots/04-hpa.png)
+
+### 5. Persistent Storage
+
+![PVC](docs/screenshots/05-pvc.png)
+
+### 6. NGINX Ingress
+
+![Ingress](docs/screenshots/06-ingress.png)
+
+### 7. CloudWatch
+
+![CloudWatch](docs/screenshots/07-cloudwatch.png)
+
+### 8. Helm
+
+![Helm](docs/screenshots/08-helm.png)
+
+### 9. Amazon ECR
+
+![ECR](docs/screenshots/09-ecr.png)
+
+> **Note:** These PNG files document the actual command outputs captured during final validation. For an assignment that explicitly requires screenshots of the original terminal/AWS/Jenkins UI, add your original UI screenshots to this same directory.
+
+---
+
+# 23. Final Completion Checklist
+
+- [x] GitHub repository configured
+- [x] Docker images built
+- [x] Amazon ECR repositories created
+- [x] Images pushed to ECR
+- [x] EKS cluster created
+- [x] Three worker nodes Ready
+- [x] Kubernetes namespace configured
+- [x] MongoDB StatefulSet deployed
+- [x] Persistent storage configured
+- [x] EBS CSI Driver configured
+- [x] Application Deployments running
+- [x] Kubernetes Services configured
+- [x] HPA configured
+- [x] NGINX Ingress configured
+- [x] AWS Load Balancer configured
+- [x] Amazon S3 configured for video storage
+- [x] CloudWatch observability configured
+- [x] Helm chart created
+- [x] Helm release deployed
+- [x] Jenkins CI/CD configured
+- [x] Jenkins pipeline completed successfully
+- [x] Final Kubernetes validation completed
+
+---
+
+# Repository
+
+**GitHub:** https://github.com/karan11619/StreamingApp
+
+**EKS Cluster:** `streamingapp-cluster`
+
+**Namespace:** `streamingapp`
+
+**Region:** `ap-south-1`
 
 **Status: READY FOR SUBMISSION 🚀**
+
+### 10. StreamFlix Application Homepage
+
+The deployed StreamFlix frontend displays the featured **The Nights** video, trending content, genre sections, search, navigation, and authenticated user information.
+
+![Screenshot - StreamFlix Homepage](docs/screenshots/10-streamflix-homepage.png)
